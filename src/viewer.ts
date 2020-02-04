@@ -12,6 +12,7 @@ import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
+import { WebXRContext } from './WebXR';
 
 export interface Texture {
     name: string;
@@ -22,6 +23,8 @@ export interface Texture {
 
 export interface ViewerRenderInput {
     camera: Camera;
+    cameras: Camera[];
+    useMultipleCameras: Boolean,
     time: number;
     deltaTime: number;
     backbufferWidth: number;
@@ -105,7 +108,7 @@ export class Viewer {
     private clearScene: ClearScene = new ClearScene();
     private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
-    constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
+    constructor(private gfxSwapChain: GfxSwapChain, private webXRContext: WebXRContext, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
         this.rafTime = window.performance.now();
 
@@ -113,6 +116,8 @@ export class Viewer {
         this.gfxDevice = this.gfxSwapChain.getDevice();
         this.viewerRenderInput = {
             camera: this.camera,
+            cameras: [this.camera, this.camera], // TODO fordacious: fix this hack
+            useMultipleCameras: false,
             time: this.sceneTime,
             deltaTime: 0,
             backbufferWidth: 0,
@@ -139,6 +144,7 @@ export class Viewer {
     }
 
     private render(): void {
+        this.viewerRenderInput.useMultipleCameras = !!this.webXRContext && this.webXRContext.isRunning() && !!this.webXRContext.views;
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
@@ -150,6 +156,12 @@ export class Viewer {
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+
+        // TODO fordacious: WebXR rendering
+        if (!!this.webXRContext && this.webXRContext.isRunning() && !!this.webXRContext.views) {
+            // TODO fordacious: render from camera, set view matrix in camera
+            
+        }
 
         let renderPass: GfxRenderPass | null = null;
         if (this.scene !== null)
@@ -187,6 +199,7 @@ export class Viewer {
         this.cameraController = cameraController;
         this.cameraController.camera = this.camera;
         this.cameraController.forceUpdate = true;
+        this.cameraController.webXRContext = this.webXRContext;
     }
 
     public setScene(scene: SceneGfx | null): void {
@@ -267,7 +280,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false });
+    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {
@@ -289,7 +302,7 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
     }
 
     const gfxSwapChain = createSwapChainForWebGL2(gl);
-    out.viewer = new Viewer(gfxSwapChain, canvas);
+    out.viewer = new Viewer(gfxSwapChain, new WebXRContext(gl), canvas);
 
     return InitErrorCode.SUCCESS;
 }
@@ -299,7 +312,7 @@ async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement)
     if (gfxSwapChain === null)
         return InitErrorCode.MISSING_MISC_WEB_APIS;
 
-    out.viewer = new Viewer(gfxSwapChain, canvas);
+    out.viewer = new Viewer(gfxSwapChain, null, canvas);
     return InitErrorCode.SUCCESS;
 }
 

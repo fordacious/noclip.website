@@ -5,7 +5,9 @@ import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
+import { WebXRContext } from './WebXR';
 
+// TODO Need XRCamera distinction?
 export class Camera {
     // Converts to view space from world space.
     // Should be called viewFromWorldMatrix
@@ -266,6 +268,8 @@ export interface CameraController {
     update(inputManager: InputManager, dt: number): boolean;
     getKeyMoveSpeed(): number | null;
     setKeyMoveSpeed(speed: number): void;
+
+    webXRContext: WebXRContext;
 }
 
 export interface CameraControllerClass {
@@ -418,6 +422,121 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
             if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
         }
+
+        updated = updated || this.forceUpdate;
+
+        if (updated) {
+            this.camera.isOrthographic = false;
+            mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+            this.camera.worldMatrixUpdated();
+            this.forceUpdate = false;
+        }
+
+        return updated;
+    }
+}
+
+export class XRCameraController implements CameraController {
+    public camera: Camera;
+    public webXRContext: WebXRContext;
+    public forceUpdate: boolean = false;
+    public useViewUp: boolean = false;
+    public onkeymovespeed: () => void = () => {};
+
+    private keyMovement = vec3.create();
+    private mouseMovement = vec3.create();
+
+    private keyMoveSpeed = 60;
+    private keyMoveShiftMult = 5;
+    private keyMoveVelocityMult = 1/5;
+    private keyMoveDrag = 0.8;
+    private keyAngleChangeVelFast = 0.1;
+    private keyAngleChangeVelSlow = 0.02;
+
+    private mouseLookSpeed = 500;
+    private mouseLookDragFast = 0;
+    private mouseLookDragSlow = 0;
+
+    public sceneKeySpeedMult = 1;
+
+    public cameraUpdateForced(): void {
+        vec3.set(this.keyMovement, 0, 0, 0);
+    }
+
+    public setKeyMoveSpeed(speed: number): void {
+        this.keyMoveSpeed = speed;
+    }
+
+    public getKeyMoveSpeed(): number | null {
+        return this.keyMoveSpeed;
+    }
+
+    public update(inputManager: InputManager, dt: number): boolean {
+        const camera = this.camera;
+        let updated = false;
+
+        // TODO fordacious: update from webXRContext
+
+        if (inputManager.isKeyDown('KeyB')) {
+            mat4.identity(camera.worldMatrix);
+            this.cameraUpdateForced();
+            updated = true;
+        }
+
+        this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+
+        let keyMoveMult = 1;
+        if (isShiftPressed)
+            keyMoveMult = this.keyMoveShiftMult;
+
+        const keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
+        const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
+    
+        const keyMovement = this.keyMovement;
+        const keyMoveLowSpeedCap = 0.01;
+
+        if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp')) {
+            keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
+        } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
+            keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity, keyMoveSpeedCap);
+        } else {
+            keyMovement[2] *= this.keyMoveDrag;
+            if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
+        }
+
+        if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
+            keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
+        } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {
+            keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocity, keyMoveSpeedCap);
+        } else {
+            keyMovement[0] *= this.keyMoveDrag;
+            if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
+        }
+
+        if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
+            keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
+        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
+            keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
+        } else {
+            keyMovement[1] *= this.keyMoveDrag;
+            if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
+        }
+
+        // TODO fordacious: W and S should move you on the x, z plane
+        const up = vec3.create();
+        vec3.set(up, 0, 1, 0);
+
+        if (!vec3.exactEquals(keyMovement, vec3Zero)) {
+            const finalMovement = scratchVec3a;
+            vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, up, keyMovement[1]);
+            vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+            mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
+            updated = true;
+        }
+
+        // TODO fordacious: set camera from webxr HMD pose
 
         updated = updated || this.forceUpdate;
 

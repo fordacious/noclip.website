@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, XRCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
@@ -15,6 +15,7 @@ import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
+import { IsWebXRSupported, WebXRContext } from './WebXR';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1499,10 +1500,11 @@ class ViewerSettings extends Panel {
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
     private cameraControllerOrtho: HTMLElement;
+    private cameraControllerXR: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
 
-    constructor(private ui: UI, private viewer: Viewer.Viewer) {
+    constructor(private ui: UI, private viewer: Viewer.Viewer, private webXRContext: WebXRContext) {
         super();
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
@@ -1523,7 +1525,7 @@ class ViewerSettings extends Panel {
 
 <div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Controller</div>
-<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div>
+<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div><div class="SettingsButton CameraControllerXR">XR</div>
 </div>
 
 <div class="SliderContainer">
@@ -1550,18 +1552,35 @@ class ViewerSettings extends Panel {
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
         this.cameraControllerWASD.onclick = () => {
+            this.webXRContext.end();
             this.setCameraControllerClass(FPSCameraController);
         };
 
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
         this.cameraControllerOrbit.onclick = () => {
+            this.webXRContext.end();
             this.setCameraControllerClass(OrbitCameraController);
         };
 
         this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
         this.cameraControllerOrtho.onclick = () => {
+            this.webXRContext.end();
             this.setCameraControllerClass(OrthoCameraController);
         };
+
+        this.cameraControllerXR = this.contents.querySelector(".CameraControllerXR") as HTMLInputElement;
+        this.cameraControllerXR.onclick = () => {
+            // TODO fordacious: Should enter on selecting this and exit XR on selecting something else
+            // TODO fordacious: This will need to disable other buttons while we wait, otherwise there is a race on the other buttons
+            this.webXRContext.start();
+            this.setCameraControllerClass(XRCameraController);
+        };
+
+        // Disable XR button if WebXR is not available
+        this.cameraControllerXR.hidden = true;
+        IsWebXRSupported().then(() => {
+            this.cameraControllerXR.hidden = false;
+        });
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
@@ -1610,6 +1629,7 @@ class ViewerSettings extends Panel {
         setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
         setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
+        setElementHighlighted(this.cameraControllerXR, cameraControllerClass === XRCameraController);
 
         setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
     }
@@ -2567,7 +2587,7 @@ export class UI {
 
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
-        this.viewerSettings = new ViewerSettings(this, viewer);
+        this.viewerSettings = new ViewerSettings(this, viewer, webXRContext);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
