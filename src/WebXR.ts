@@ -15,6 +15,8 @@ export class WebXRContext {
     public renderingContext: WebGLRenderingContext;
     public views: [:XrView];
 
+    public onRender: ()=>void;
+
     // TODO fordacious: need rendering context to pass to rendering system
     constructor(private gl: WebGLRenderingContext ) {
         this.renderingContext = gl;
@@ -60,6 +62,8 @@ export class WebXRContext {
         if (pose) {
             this.views = pose.views;
         }
+
+        this.onRender();
 
         session.requestAnimationFrame(this.onXRFrame.bind(this));
       }

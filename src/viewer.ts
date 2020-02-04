@@ -108,7 +108,7 @@ export class Viewer {
     private clearScene: ClearScene = new ClearScene();
     private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
-    constructor(private gfxSwapChain: GfxSwapChain, private webXRContext: WebXRContext, public canvas: HTMLCanvasElement) {
+    constructor(private gfxSwapChain: GfxSwapChain, public webXRContext: WebXRContext, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
         this.rafTime = window.performance.now();
 
@@ -125,6 +125,10 @@ export class Viewer {
             viewport: this.viewport,
             onscreenTexture: null!,
         };
+
+        if (this.webXRContext) {
+            this.webXRContext.onRender = this.render.bind(this, true);
+        }
     }
 
     private onKeyMoveSpeed(): void {
@@ -143,7 +147,7 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private render(): void {
+    private render(isWebXR:Boolean = false): void {
         this.viewerRenderInput.useMultipleCameras = !!this.webXRContext && this.webXRContext.isRunning() && !!this.webXRContext.views;
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
@@ -163,30 +167,41 @@ export class Viewer {
             
         }
 
-        let renderPass: GfxRenderPass | null = null;
-        if (this.scene !== null)
-            renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+        //var cameras = this.viewerRenderInput.useMultipleCameras ? this.viewerRenderInput.cameras : [this.viewerRenderInput.camera];
+        var cameras = [this.viewerRenderInput.camera];
+        //for (var i = 0; i < cameras.length; i++) {
+            //this.viewerRenderInput.camera = cameras[i];
+            // TODO foracious: render with all cameras
+            let renderPass: GfxRenderPass | null = null;
+            if (this.scene !== null)
+                renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
 
-        if (renderPass === null) {
-            renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
-        } else {
-            this.clearScene.minimize(this.gfxDevice);
-        }
+            if (renderPass === null) {
+                renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+            } else {
+                this.clearScene.minimize(this.gfxDevice);
+            }
 
-        // TODO(jstpierre): Rework the render API eventually.
-        const descriptor = this.gfxDevice.queryRenderPass(renderPass);
+            // TODO(jstpierre): Rework the render API eventually.
+            const descriptor = this.gfxDevice.queryRenderPass(renderPass);
 
-        renderPass.endPass();
-        this.gfxDevice.submitPass(renderPass);
+            renderPass.endPass();
+            this.gfxDevice.submitPass(renderPass);
 
-        // Resolve.
-        this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
-        this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-        const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-        resolvePass.endPass();
-        this.gfxDevice.submitPass(resolvePass);
+            // Resolve.
+            this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
+            this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+            const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
+            resolvePass.endPass();
+            this.gfxDevice.submitPass(resolvePass);
 
-        this.gfxSwapChain.present();
+            if (isWebXR && this.webXRContext.isRunning() && this.webXRContext.xrSession.renderState.baseLayer) {
+                var frameBuffer = this.webXRContext.xrSession.renderState.baseLayer.framebuffer;
+                this.gfxSwapChain.present(frameBuffer);
+            } else {
+                this.gfxSwapChain.present();
+            }
+        //}
 
         this.gfxDevice.popDebugGroup();
         this.renderStatisticsTracker.endFrame();

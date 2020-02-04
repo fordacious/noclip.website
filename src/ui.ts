@@ -1504,8 +1504,12 @@ class ViewerSettings extends Panel {
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
 
-    constructor(private ui: UI, private viewer: Viewer.Viewer, private webXRContext: WebXRContext) {
+    private webXRContext: WebXRContext;
+
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
+
+        this.webXRContext = viewer.webXRContext;
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
 
@@ -2587,7 +2591,7 @@ export class UI {
 
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
-        this.viewerSettings = new ViewerSettings(this, viewer, webXRContext);
+        this.viewerSettings = new ViewerSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
