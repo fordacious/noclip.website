@@ -1527,7 +1527,7 @@ class ViewerSettings extends Panel {
 }
 </style>
 
-<div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-items: center;">
+<div style="display: grid; grid-template-columns: 4fr 1fr 1fr 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Controller</div>
 <div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div><div class="SettingsButton CameraControllerXR">XR</div>
 </div>
@@ -1574,9 +1574,10 @@ class ViewerSettings extends Panel {
 
         this.cameraControllerXR = this.contents.querySelector(".CameraControllerXR") as HTMLInputElement;
         this.cameraControllerXR.onclick = () => {
+            // TODO fordacious: should launch at offset currently shown? Could make it an addon for WASD?
             // TODO fordacious: Should enter on selecting this and exit XR on selecting something else
             // TODO fordacious: This will need to disable other buttons while we wait, otherwise there is a race on the other buttons
-            this.webXRContext.start();
+            this.webXRContext.start(); // TODO fordacious: select previous mode if this fails
             this.setCameraControllerClass(XRCameraController);
         };
 
@@ -1636,6 +1637,8 @@ class ViewerSettings extends Panel {
         setElementHighlighted(this.cameraControllerXR, cameraControllerClass === XRCameraController);
 
         setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
+
+        // TODO fordacious: disable other controls for webxr
     }
 
     private invertYChanged(saveManager: SaveManager, key: string): void {

@@ -55,6 +55,8 @@ function resetGfxDebugGroup(group: GfxDebugGroup): void {
 }
 
 export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, devicePixelRatio: number): void {
+    width = 2200;
+    height = 2200;
     canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
     canvas.width = width * devicePixelRatio;
     canvas.height = height * devicePixelRatio;
@@ -168,37 +170,87 @@ export class Viewer {
         }
 
         //var cameras = this.viewerRenderInput.useMultipleCameras ? this.viewerRenderInput.cameras : [this.viewerRenderInput.camera];
-        var cameras = [this.viewerRenderInput.camera];
+        //var cameras = [this.viewerRenderInput.camera];
         //for (var i = 0; i < cameras.length; i++) {
             //this.viewerRenderInput.camera = cameras[i];
             // TODO foracious: render with all cameras
-            let renderPass: GfxRenderPass | null = null;
-            if (this.scene !== null)
-                renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+            if (isWebXR && this.webXRContext.isRunning() && this.webXRContext.views && this.webXRContext.xrSession.renderState.baseLayer) {
+                for (let i = 0; i < this.webXRContext.views.length; i++) {
+                    let xrView : XrView = this.webXRContext.views[i];
+                    let xrViewPort : XrViewPort = this.webXRContext.xrSession.renderState.baseLayer.getViewport(xrView);
 
-            if (renderPass === null) {
-                renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+                    var oldViewport = [this.viewerRenderInput.viewport.x, this.viewerRenderInput.viewport.y, this.viewerRenderInput.viewport.w, this.viewerRenderInput.viewport.h];
+                    this.viewerRenderInput.viewport.x = xrViewPort.x / this.canvas.width;
+                    this.viewerRenderInput.viewport.y = xrViewPort.y / this.canvas.height;
+                    this.viewerRenderInput.viewport.w = (xrViewPort.width / this.canvas.width);
+                    this.viewerRenderInput.viewport.h = (xrViewPort.height / this.canvas.height);
+
+                    var oldProj = this.camera.projectionMatrix;
+                    //this.camera.projectionMatrix = xrView.projectionMatrix;
+                    var oldMatrix = this.camera.viewMatrix;
+                    //this.camera.viewMatrix = xrView.transform;
+
+                    let renderPass: GfxRenderPass | null = null;
+                    if (this.scene !== null) {
+                        renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+                    }
+
+                    if (renderPass === null) {
+                        renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+                    } else {
+                        this.clearScene.minimize(this.gfxDevice);
+                    }
+
+                    // TODO(jstpierre): Rework the render API eventually.
+                    const descriptor = this.gfxDevice.queryRenderPass(renderPass);
+
+                    renderPass.endPass();
+                    this.gfxDevice.submitPass(renderPass);
+
+                    // Resolve.
+                    this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
+                    this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+                    const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
+                    resolvePass.endPass();
+                    this.gfxDevice.submitPass(resolvePass);
+
+                    // TODO fordacious: render using the views and framebuffer of the webxr frame
+                    var frameBuffer = this.webXRContext.xrSession.renderState.baseLayer.framebuffer;
+                    this.gfxSwapChain.present(frameBuffer);
+
+                    this.camera.projectionMatrix = oldProj;
+                    this.camera.viewMatrix = oldMatrix;
+                    this.viewerRenderInput.viewport.x = oldViewport[0];
+                    this.viewerRenderInput.viewport.y = oldViewport[1];
+                    this.viewerRenderInput.viewport.w = oldViewport[2];
+                    this.viewerRenderInput.viewport.h = oldViewport[3];
+                    break;
+                }
             } else {
-                this.clearScene.minimize(this.gfxDevice);
-            }
+                this.viewerRenderInput.viewport = this.viewport;
+                let renderPass: GfxRenderPass | null = null;
+                if (this.scene !== null)
+                    renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
 
-            // TODO(jstpierre): Rework the render API eventually.
-            const descriptor = this.gfxDevice.queryRenderPass(renderPass);
+                if (renderPass === null) {
+                    renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+                } else {
+                    this.clearScene.minimize(this.gfxDevice);
+                }
 
-            renderPass.endPass();
-            this.gfxDevice.submitPass(renderPass);
+                // TODO(jstpierre): Rework the render API eventually.
+                const descriptor = this.gfxDevice.queryRenderPass(renderPass);
 
-            // Resolve.
-            this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
-            this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-            const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-            resolvePass.endPass();
-            this.gfxDevice.submitPass(resolvePass);
+                renderPass.endPass();
+                this.gfxDevice.submitPass(renderPass);
 
-            if (isWebXR && this.webXRContext.isRunning() && this.webXRContext.xrSession.renderState.baseLayer) {
-                var frameBuffer = this.webXRContext.xrSession.renderState.baseLayer.framebuffer;
-                this.gfxSwapChain.present(frameBuffer);
-            } else {
+                // Resolve.
+                this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
+                this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+                const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
+                resolvePass.endPass();
+                this.gfxDevice.submitPass(resolvePass);
+
                 this.gfxSwapChain.present();
             }
         //}

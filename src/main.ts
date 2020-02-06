@@ -191,6 +191,9 @@ class Main {
 
         this.canvas = document.createElement('canvas');
 
+        this.canvas.width = 2200;
+        this.canvas.height = 2200;
+
         const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
             this.toplevel.appendChild(makeErrorUI(errorCode));

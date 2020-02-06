@@ -444,20 +444,15 @@ export class XRCameraController implements CameraController {
     public onkeymovespeed: () => void = () => {};
 
     private keyMovement = vec3.create();
-    private mouseMovement = vec3.create();
 
     private keyMoveSpeed = 60;
     private keyMoveShiftMult = 5;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
-    private keyAngleChangeVelFast = 0.1;
-    private keyAngleChangeVelSlow = 0.02;
-
-    private mouseLookSpeed = 500;
-    private mouseLookDragFast = 0;
-    private mouseLookDragSlow = 0;
 
     public sceneKeySpeedMult = 1;
+
+    private offset = mat4.create();
 
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
@@ -478,7 +473,7 @@ export class XRCameraController implements CameraController {
         // TODO fordacious: update from webXRContext
 
         if (inputManager.isKeyDown('KeyB')) {
-            mat4.identity(camera.worldMatrix);
+            mat4.identity(this.offset);
             this.cameraUpdateForced();
             updated = true;
         }
@@ -527,12 +522,65 @@ export class XRCameraController implements CameraController {
         const up = vec3.create();
         vec3.set(up, 0, 1, 0);
 
-        if (!vec3.exactEquals(keyMovement, vec3Zero)) {
-            const finalMovement = scratchVec3a;
-            vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
-            vec3.scaleAndAdd(finalMovement, finalMovement, up, keyMovement[1]);
-            vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
-            mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
+        if (this.webXRContext.views && this.webXRContext.views.length) {
+            var mat = mat4.create();
+            mat4.set(mat,
+                this.webXRContext.views[0].transform.matrix[0],this.webXRContext.views[0].transform.matrix[1],this.webXRContext.views[0].transform.matrix[2], this.webXRContext.views[0].transform.matrix[3],
+                this.webXRContext.views[0].transform.matrix[4],this.webXRContext.views[0].transform.matrix[5],this.webXRContext.views[0].transform.matrix[6],this.webXRContext.views[0].transform.matrix[7],
+                this.webXRContext.views[0].transform.matrix[8],this.webXRContext.views[0].transform.matrix[9],this.webXRContext.views[0].transform.matrix[10],this.webXRContext.views[0].transform.matrix[11],
+                this.webXRContext.views[0].transform.matrix[12],this.webXRContext.views[0].transform.matrix[13],this.webXRContext.views[0].transform.matrix[14],this.webXRContext.views[0].transform.matrix[15]);
+            
+            if (!vec3.exactEquals(keyMovement, vec3Zero)) {
+                const fromQuat = mat4.create();
+                mat4.fromQuat(fromQuat, this.webXRContext.views[0].transform.orientation);
+
+                const finalMovement = scratchVec3a;
+                vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
+                vec3.scaleAndAdd(finalMovement, finalMovement, up, keyMovement[1]);
+                vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+                mat4.translate(this.offset, this.offset, finalMovement);
+                // TODO fordacious: offset should move based on the head direction. Could use viewer to local to get this
+                //mat4.mul(this.offset, this.offset, fromQuat);
+                updated = true;
+            }
+            
+            //mat4.mul(camera.worldMatrix, camera.worldMatrix, this.offset);
+            const scale = vec3.create();
+            vec3.set(scale, 1, 1, 1);
+            // TODO fordacious: make this work
+            var s = 70;
+            vec3.set(scale, s, s, s);
+            // const scale2 = vec3.create()
+            // vec3.set(scale2, -1, -1, -1);
+            mat4.scale(mat, mat, scale);
+            // TODO fordacious: offset should work
+            //mat4.translate(this.camera.worldMatrix, this.camera.worldMatrix, this.offset);
+            const pos = vec3.create();
+            vec3.set(pos,
+                this.webXRContext.views[0].transform.position.x * scale[0],
+                this.webXRContext.views[0].transform.position.y * scale[1],
+                this.webXRContext.views[0].transform.position.z * scale[2]);
+            mat[12] *= s;
+            mat[13] *= s;
+            mat[14] *= s;
+            mat[12] += this.offset[12];
+            mat[13] += this.offset[13];
+            mat[14] += this.offset[14];
+            //mat4.translate(mat, mat, pos);
+            //this.camera.projectionMatrix = this.webXRContext.views[0].projectionMatrix;
+
+            this.camera.worldMatrix.set(mat);
+            mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+
+            var prjMatrix = this.webXRContext.views[0].projectionMatrix;
+            this.camera.projectionMatrix.set(prjMatrix);
+            var fov = 2.0*Math.atan( 1.0/prjMatrix[5] );
+            var aspect = prjMatrix[5] / prjMatrix[0];
+
+            this.camera.fovY = fov;
+            this.camera.aspect = aspect;
+            this.camera.setClipPlanes(0.8);
+            
             updated = true;
         }
 
@@ -545,6 +593,9 @@ export class XRCameraController implements CameraController {
             mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
+            
+            //this.camera.frustum.setViewFrustum(-100, 100, -100, 100, 0.5, 1000, false);
+            //this.camera.frustum.updateWorldFrustum(this.camera.worldMatrix);
         }
 
         return updated;
