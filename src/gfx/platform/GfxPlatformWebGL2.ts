@@ -1655,7 +1655,7 @@ void main() {
         gl.disable(gl.SCISSOR_TEST);
         if (!!(clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT)) {
             assert(this._currentColorAttachments.length > 0);
-            gl.clearColor(clearColorR, clearColorG, clearColorB, clearColorA);
+            gl.clearColor(clearColorR, clearColorG, clearColorB, 0);
         }
         if (!!(clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)) {
             assert(this._currentDepthStencilAttachment !== null);

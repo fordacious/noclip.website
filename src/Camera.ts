@@ -270,6 +270,7 @@ export interface CameraController {
     setKeyMoveSpeed(speed: number): void;
 
     webXRContext: WebXRContext;
+    viewId: Number;
 }
 
 export interface CameraControllerClass {
@@ -437,8 +438,9 @@ export class FPSCameraController implements CameraController {
 }
 
 export class XRCameraController implements CameraController {
-    public camera: Camera;
+    public cameras = [];
     public webXRContext: WebXRContext;
+    public viewId: viewId;
     public forceUpdate: boolean = false;
     public useViewUp: boolean = false;
     public onkeymovespeed: () => void = () => {};
@@ -467,7 +469,6 @@ export class XRCameraController implements CameraController {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
-        const camera = this.camera;
         let updated = false;
 
         // TODO fordacious: update from webXRContext
@@ -521,81 +522,74 @@ export class XRCameraController implements CameraController {
         // TODO fordacious: W and S should move you on the x, z plane
         const up = vec3.create();
         vec3.set(up, 0, 1, 0);
-
-        if (this.webXRContext.views && this.webXRContext.views.length) {
-            var mat = mat4.create();
-            mat4.set(mat,
-                this.webXRContext.views[0].transform.matrix[0],this.webXRContext.views[0].transform.matrix[1],this.webXRContext.views[0].transform.matrix[2], this.webXRContext.views[0].transform.matrix[3],
-                this.webXRContext.views[0].transform.matrix[4],this.webXRContext.views[0].transform.matrix[5],this.webXRContext.views[0].transform.matrix[6],this.webXRContext.views[0].transform.matrix[7],
-                this.webXRContext.views[0].transform.matrix[8],this.webXRContext.views[0].transform.matrix[9],this.webXRContext.views[0].transform.matrix[10],this.webXRContext.views[0].transform.matrix[11],
-                this.webXRContext.views[0].transform.matrix[12],this.webXRContext.views[0].transform.matrix[13],this.webXRContext.views[0].transform.matrix[14],this.webXRContext.views[0].transform.matrix[15]);
-            
-            if (!vec3.exactEquals(keyMovement, vec3Zero)) {
-                const fromQuat = mat4.create();
-                mat4.fromQuat(fromQuat, this.webXRContext.views[0].transform.orientation);
-
-                const finalMovement = scratchVec3a;
-                vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
-                vec3.scaleAndAdd(finalMovement, finalMovement, up, keyMovement[1]);
-                vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
-                mat4.translate(this.offset, this.offset, finalMovement);
-                // TODO fordacious: offset should move based on the head direction. Could use viewer to local to get this
-                //mat4.mul(this.offset, this.offset, fromQuat);
-                updated = true;
-            }
-            
-            //mat4.mul(camera.worldMatrix, camera.worldMatrix, this.offset);
-            const scale = vec3.create();
-            vec3.set(scale, 1, 1, 1);
-            // TODO fordacious: make this work
-            var s = 70;
-            vec3.set(scale, s, s, s);
-            // const scale2 = vec3.create()
-            // vec3.set(scale2, -1, -1, -1);
-            mat4.scale(mat, mat, scale);
-            // TODO fordacious: offset should work
-            //mat4.translate(this.camera.worldMatrix, this.camera.worldMatrix, this.offset);
-            const pos = vec3.create();
-            vec3.set(pos,
-                this.webXRContext.views[0].transform.position.x * scale[0],
-                this.webXRContext.views[0].transform.position.y * scale[1],
-                this.webXRContext.views[0].transform.position.z * scale[2]);
-            mat[12] *= s;
-            mat[13] *= s;
-            mat[14] *= s;
-            mat[12] += this.offset[12];
-            mat[13] += this.offset[13];
-            mat[14] += this.offset[14];
-            //mat4.translate(mat, mat, pos);
-            //this.camera.projectionMatrix = this.webXRContext.views[0].projectionMatrix;
-
-            this.camera.worldMatrix.set(mat);
-            mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
-
-            var prjMatrix = this.webXRContext.views[0].projectionMatrix;
-            this.camera.projectionMatrix.set(prjMatrix);
-            var fov = 2.0*Math.atan( 1.0/prjMatrix[5] );
-            var aspect = prjMatrix[5] / prjMatrix[0];
-
-            this.camera.fovY = fov;
-            this.camera.aspect = aspect;
-            this.camera.setClipPlanes(0.8);
-            
+                
+        if (!vec3.exactEquals(keyMovement, vec3Zero)) {
+            const finalMovement = scratchVec3a;
+            vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, up, keyMovement[1]);
+            vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+            mat4.translate(this.offset, this.offset, finalMovement);
+            // TODO fordacious: offset should move based on the head direction. Could use viewer to local to get this
             updated = true;
         }
 
-        // TODO fordacious: set camera from webxr HMD pose
+        if (this.webXRContext.views && this.webXRContext.views.length) {
+            for (var i = 0; i < this.cameras.length; i++) {
+                const camera : Camera = this.cameras[i];
+                let xrView = this.webXRContext.views[i];
+                // TODO fordacious: clean this up
+                var mat = mat4.create();
+                mat4.set(mat,
+                    xrView.transform.matrix[0],xrView.transform.matrix[1],xrView.transform.matrix[2], xrView.transform.matrix[3],
+                    xrView.transform.matrix[4],xrView.transform.matrix[5],xrView.transform.matrix[6],xrView.transform.matrix[7],
+                    xrView.transform.matrix[8],xrView.transform.matrix[9],xrView.transform.matrix[10],xrView.transform.matrix[11],
+                    xrView.transform.matrix[12],xrView.transform.matrix[13],xrView.transform.matrix[14],xrView.transform.matrix[15]);
+                
+                const scale = vec3.create();
+                vec3.set(scale, 1, 1, 1);
+                // TODO fordacious: make this a settable value
+                var s = 70;
+                vec3.set(scale, s, s, s);
+                mat4.scale(mat, mat, scale);
 
-        updated = updated || this.forceUpdate;
+                // TODO fordacious: use mat4 methods to do this cleanly
+                const pos = vec3.create();
+                vec3.set(pos,
+                    xrView.transform.position.x * scale[0],
+                    xrView.transform.position.y * scale[1],
+                    xrView.transform.position.z * scale[2]);
+                mat[12] *= s;
+                mat[13] *= s;
+                mat[14] *= s;
+                mat[12] += this.offset[12];
+                mat[13] += this.offset[13];
+                mat[14] += this.offset[14];
 
-        if (updated) {
-            this.camera.isOrthographic = false;
-            mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
-            this.camera.worldMatrixUpdated();
-            this.forceUpdate = false;
+                camera.worldMatrix.set(mat);
+                mat4.invert(camera.viewMatrix, camera.worldMatrix);
+
+                // Set the window camera to match
+                // TODO fordacious: use the viewer space to actually set this
+                if (i == 0) {
+                    this.camera.worldMatrix.set(mat);
+                    mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+                }
+
+                var prjMatrix = xrView.projectionMatrix;
+                camera.projectionMatrix.set(prjMatrix);
+                var fov = 2.0*Math.atan( 1.0/prjMatrix[5] );
+                var aspect = prjMatrix[5] / prjMatrix[0];
+
+                camera.fovY = fov;
+                camera.aspect = aspect;
+                camera.setClipPlanes(0.8);
+
+                camera.isOrthographic = false;
+                mat4.invert(camera.viewMatrix, camera.worldMatrix);
+                camera.worldMatrixUpdated();
             
-            //this.camera.frustum.setViewFrustum(-100, 100, -100, 100, 0.5, 1000, false);
-            //this.camera.frustum.updateWorldFrustum(this.camera.worldMatrix);
+                updated = true;
+            }
         }
 
         return updated;
