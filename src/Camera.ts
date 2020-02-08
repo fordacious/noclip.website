@@ -528,8 +528,20 @@ export class XRCameraController implements CameraController {
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, up, keyMovement[1]);
             vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+
+            var offsetViewSpace = this.webXRContext.xrViewSpace.getOffsetReferenceSpace(
+                new XRRigidTransform(new DOMPointReadOnly(finalMovement[0], finalMovement[1], finalMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
+            
+            // TODO fordacious: this fails as it needs to use the frame from the current requestAnimationFrame
+            // var pose = this.webXRContext.getPose(offsetViewSpace, this.webXRContext.xrLocalSpace);
+            // if (pose) {
+            //     var orientedOffset = vec3.create();
+            //     vec3.set(orientedOffset, pose.transform.position[0], pose.transform.position[1], pose.transform.position[2]);
+            //     mat4.translate(this.offset, this.offset, orientedOffset);
+            // }
+
             mat4.translate(this.offset, this.offset, finalMovement);
-            // TODO fordacious: offset should move based on the head direction. Could use viewer to local to get this
+
             updated = true;
         }
 

@@ -9,12 +9,15 @@ export function IsWebXRSupported() {
 
 export class WebXRContext {
     public xrSession: XrSession;
+    public xrViewSpace: XrReferenceSpace;
     public xrLocalSpace: XrReferenceSpace;
 
     public renderingContext: WebGLRenderingContext;
     public views: [:XrView];
 
     public onRender: ()=>void;
+
+    public XrPose viewerPose;
 
     // TODO fordacious: need rendering context to pass to rendering system
     constructor(private gl: WebGLRenderingContext ) {
@@ -23,18 +26,21 @@ export class WebXRContext {
 
     public start() {
         var _this = this;
-        // TODO fordacious: this always fails the first time
         navigator.xr.requestSession('immersive-vr', {
             requiredFeatures: [],
-            optionalFeatures: ['local-floor']
+            optionalFeatures: ['viewer', 'local-floor']
         }).then((xrSession: XrSession) => {
             let glLayer = new XRWebGLLayer(xrSession, this.renderingContext);
             xrSession.updateRenderState({ baseLayer: glLayer });
-
-            xrSession.requestReferenceSpace('local-floor').then((refSpace: XrReferenceSpace) => {
-                this.xrLocalSpace = refSpace;
-                xrSession.requestAnimationFrame(this.onXRFrame.bind(_this));
-                this.xrSession = xrSession;
+            
+            xrSession.requestReferenceSpace('viewer').then((refSpace: XrReferenceSpace) => {
+                this.xrViewSpace = refSpace;
+                
+                xrSession.requestReferenceSpace('local-floor').then((refSpace: XrReferenceSpace) => {
+                    this.xrLocalSpace = refSpace;
+                    xrSession.requestAnimationFrame(this.onXRFrame.bind(_this));
+                    this.xrSession = xrSession;
+                });
             });
         });
     }
@@ -58,6 +64,8 @@ export class WebXRContext {
         if (pose) {
             this.views = pose.views;
         }
+
+        this.viewerPose = frame.getPose(this.xrViewSpace, this.xrLocalSpace);
 
         this.onRender();
 

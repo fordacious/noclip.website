@@ -1652,10 +1652,15 @@ void main() {
         }
         this._currentDepthStencilResolveTo = depthStencilResolveTo as GfxTextureP_GL;
 
+        // TODO fordacious: why doesn't this work?
+        // var vp = gl.getParameter(gl.VIEWPORT);
+        // this.setScissor(vp[0], vp[1], vp[2], vp[3]);
+        // gl.enable(gl.SCISSOR_TEST);
+
         gl.disable(gl.SCISSOR_TEST);
         if (!!(clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT)) {
             assert(this._currentColorAttachments.length > 0);
-            gl.clearColor(clearColorR, clearColorG, clearColorB, 0);
+            gl.clearColor(clearColorR, clearColorG, clearColorB, clearColorA);
         }
         if (!!(clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)) {
             assert(this._currentDepthStencilAttachment !== null);
