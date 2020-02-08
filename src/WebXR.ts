@@ -13,11 +13,11 @@ export class WebXRContext {
     public xrLocalSpace: XrReferenceSpace;
 
     public renderingContext: WebGLRenderingContext;
-    public views: [:XrView];
+    public views: XrView[];
 
     public onRender: ()=>void;
 
-    public XrPose viewerPose;
+    public XrPose: viewerPose;
 
     // TODO fordacious: need rendering context to pass to rendering system
     constructor(private gl: WebGLRenderingContext ) {
