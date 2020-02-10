@@ -1500,16 +1500,11 @@ class ViewerSettings extends Panel {
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
     private cameraControllerOrtho: HTMLElement;
-    private cameraControllerXR: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
 
-    private webXRContext: WebXRContext;
-
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
-
-        this.webXRContext = viewer.webXRContext;
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
 
@@ -1529,7 +1524,7 @@ class ViewerSettings extends Panel {
 
 <div style="display: grid; grid-template-columns: 4fr 1fr 1fr 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Controller</div>
-<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div><div class="SettingsButton CameraControllerXR">XR</div>
+<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div>
 </div>
 
 <div class="SliderContainer">
@@ -1556,36 +1551,18 @@ class ViewerSettings extends Panel {
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
         this.cameraControllerWASD.onclick = () => {
-            this.webXRContext.end();
             this.setCameraControllerClass(FPSCameraController);
         };
 
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
         this.cameraControllerOrbit.onclick = () => {
-            this.webXRContext.end();
             this.setCameraControllerClass(OrbitCameraController);
         };
 
         this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
         this.cameraControllerOrtho.onclick = () => {
-            this.webXRContext.end();
             this.setCameraControllerClass(OrthoCameraController);
         };
-
-        this.cameraControllerXR = this.contents.querySelector(".CameraControllerXR") as HTMLInputElement;
-        this.cameraControllerXR.onclick = () => {
-            // TODO fordacious: should launch at offset currently shown? Could make it an addon for WASD?
-            // TODO fordacious: Should enter on selecting this and exit XR on selecting something else
-            // TODO fordacious: This will need to disable other buttons while we wait, otherwise there is a race on the other buttons
-            this.webXRContext.start(); // TODO fordacious: select previous mode if this fails
-            this.setCameraControllerClass(XRCameraController);
-        };
-
-        // Disable XR button if WebXR is not available
-        this.cameraControllerXR.hidden = true;
-        IsWebXRSupported().then(() => {
-            this.cameraControllerXR.hidden = false;
-        });
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
@@ -1634,11 +1611,8 @@ class ViewerSettings extends Panel {
         setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
         setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
-        setElementHighlighted(this.cameraControllerXR, cameraControllerClass === XRCameraController);
 
         setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
-
-        // TODO fordacious: disable other controls for webxr
     }
 
     private invertYChanged(saveManager: SaveManager, key: string): void {
@@ -1649,6 +1623,39 @@ class ViewerSettings extends Panel {
     private invertXChanged(saveManager: SaveManager, key: string): void {
         const invertX = saveManager.loadSetting<boolean>(key, false);
         this.invertXCheckbox.setChecked(invertX);
+    }
+}
+
+class XRSettings extends Panel {
+    private EnableXRCheckBox: Checkbox;
+    private webXRContext: WebXRContext;
+
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
+        super();
+
+        this.webXRContext = viewer.webXRContext;
+
+        this.setTitle(VR_ICON, 'XR Settings');
+
+        this.contents.style.lineHeight = '36px';
+
+        this.EnableXRCheckBox = new Checkbox('Enable XR?');
+        this.EnableXRCheckBox.onchanged = () => { GlobalSaveManager.saveSetting(`EnableXR`, this.EnableXRCheckBox.checked); };
+        this.contents.appendChild(this.EnableXRCheckBox.elem);
+        GlobalSaveManager.addSettingListener('EnableXR', this.enableXRChecked.bind(this));
+    }
+
+    private enableXRChecked(saveManager: SaveManager, key: string): void {
+        const enableXR = saveManager.loadSetting<boolean>(key, false);
+        this.EnableXRCheckBox.setChecked(enableXR);
+
+        if (this.EnableXRCheckBox.checked) {
+            this.webXRContext.start();
+            this.viewer.setCameraController(XRCameraController);
+        } else {
+            this.webXRContext.end();
+            this.viewer.setCameraController(FPSCameraController);
+        }
     }
 }
 
@@ -2520,6 +2527,7 @@ export class UI {
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
+    public xrSettings: XRSettings;
     public statisticsPanel: StatisticsPanel;
     public panels: Panel[];
     private about: About;
@@ -2595,6 +2603,7 @@ export class UI {
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
+        this.xrSettings = new XRSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
@@ -2669,10 +2678,16 @@ export class UI {
     }
 
     public setScenePanels(scenePanels: Panel[] | null): void {
-        if (scenePanels !== null)
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
-        else
+        if (scenePanels !== null) {
+            if (IsWebXRSupported()) {
+                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
+            } else {
+                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
+            }
+        }
+        else {
             this.setPanels([this.sceneSelect, this.about]);
+        }
     }
 
     public setPanelsAutoClosed(v: boolean): void {
