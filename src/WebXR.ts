@@ -17,7 +17,7 @@ export class WebXRContext {
 
     public onRender: ()=>void;
 
-    public XrPose: viewerPose;
+    public viewerPose: XrPose;
 
     // TODO fordacious: need rendering context to pass to rendering system
     constructor(private gl: WebGLRenderingContext ) {

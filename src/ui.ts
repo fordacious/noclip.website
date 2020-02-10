@@ -1627,7 +1627,7 @@ class ViewerSettings extends Panel {
 }
 
 class XRSettings extends Panel {
-    private enableVRCheckbox: Checkbox;
+    private EnableXRCheckBox: Checkbox;
     private webXRContext: WebXRContext;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
@@ -1639,17 +1639,17 @@ class XRSettings extends Panel {
 
         this.contents.style.lineHeight = '36px';
 
-        this.enableVRCheckbox = new Checkbox('Enable XR?');
-        this.enableVRCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`EnableVR`, this.enableVRCheckbox.checked); };
-        this.contents.appendChild(this.enableVRCheckbox.elem);
-        GlobalSaveManager.addSettingListener('EnableVR', this.enableVRChecked.bind(this));
+        this.EnableXRCheckBox = new Checkbox('Enable XR?');
+        this.EnableXRCheckBox.onchanged = () => { GlobalSaveManager.saveSetting(`EnableXR`, this.EnableXRCheckBox.checked); };
+        this.contents.appendChild(this.EnableXRCheckBox.elem);
+        GlobalSaveManager.addSettingListener('EnableXR', this.enableXRChecked.bind(this));
     }
 
-    private enableVRChecked(saveManager: SaveManager, key: string): void {
-        const enableVR = saveManager.loadSetting<boolean>(key, false);
-        this.enableVRCheckbox.setChecked(enableVR);
+    private enableXRChecked(saveManager: SaveManager, key: string): void {
+        const enableXR = saveManager.loadSetting<boolean>(key, false);
+        this.EnableXRCheckBox.setChecked(enableXR);
 
-        if (this.enableVRCheckbox.checked) {
+        if (this.EnableXRCheckBox.checked) {
             this.webXRContext.start();
             this.viewer.setCameraController(XRCameraController);
         } else {
