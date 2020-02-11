@@ -181,7 +181,7 @@ export class PostFXRenderTarget {
 }
 
 export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Color): GfxRenderPassDescriptor {
-    shouldClearColor = false; // TODO fordacious: remove. Might be able to use the viewport to prevent clearing the entire buffer. Should also only clear AFTER the first viewport if we use the same canvas as the main page
+    //shouldClearColor = false; // TODO fordacious: remove. Might be able to use the viewport to prevent clearing the entire buffer. Should also only clear AFTER the first viewport if we use the same canvas as the main page
     return {
         colorAttachment: null,
         colorResolveTo: null,

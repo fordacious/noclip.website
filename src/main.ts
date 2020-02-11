@@ -644,6 +644,7 @@ class Main {
 
         this.loadingSceneDesc = sceneDesc;
         const promise = sceneDesc.createScene(device, context);
+        const xrPromise = sceneDesc.createScene(device, context);
 
         if (promise === null) {
             console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
@@ -653,8 +654,16 @@ class Main {
         promise.then((scene: SceneGfx) => {
             if (this.loadingSceneDesc === sceneDesc) {
                 dataFetcher.setProgress();
-                this.loadingSceneDesc = null;
+                //this.loadingSceneDesc = null;
                 this.viewer.setScene(scene);
+                //this._onSceneChanged(scene, sceneStateStr);
+            }
+        });
+        xrPromise.then((scene: SceneGfx) => {
+            if (this.loadingSceneDesc === sceneDesc) {
+                dataFetcher.setProgress();
+                this.loadingSceneDesc = null;
+                this.viewer.setXRScene(scene);
                 this._onSceneChanged(scene, sceneStateStr);
             }
         });

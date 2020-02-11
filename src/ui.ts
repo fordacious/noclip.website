@@ -1628,6 +1628,7 @@ class ViewerSettings extends Panel {
 
 class XRSettings extends Panel {
     private EnableXRCheckBox: Checkbox;
+    private scaleSlider: Slider;
     private webXRContext: WebXRContext;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
@@ -1642,6 +1643,16 @@ class XRSettings extends Panel {
         this.EnableXRCheckBox = new Checkbox('Enable XR?');
         this.contents.appendChild(this.EnableXRCheckBox.elem);
         this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
+
+        this.scaleSlider = new Slider();
+        this.scaleSlider.setLabel("XR World Scale");
+        this.scaleSlider.setRange(0.1, 1000);
+        this.scaleSlider.setValue(this.viewer.xrCameraController.scale);
+        this.scaleSlider.onvalue = () => {
+            this.viewer.xrCameraController.scale = this.scaleSlider.getValue();
+            this.scaleSlider.setValue(this.viewer.xrCameraController.scale);
+        };
+        this.contents.appendChild(this.scaleSlider.elem);
     }
 
     private enableXRChecked(saveManager: SaveManager, key: string): void {
@@ -1649,12 +1660,12 @@ class XRSettings extends Panel {
         this.EnableXRCheckBox.setChecked(enableXR);
 
         if (this.EnableXRCheckBox.checked) {
-            this.webXRContext.start();
-            this.viewer.setCameraController(new XRCameraController());
+            this.webXRContext.start(); // TODO fordacious: handle this failing
+            //this.viewer.setCameraController(new XRCameraController());
         } else {
             this.webXRContext.end();
             // TODO fordacious: this will not relfect in the UI
-            this.viewer.setCameraController(new FPSCameraController());
+            //this.viewer.setCameraController(new FPSCameraController());
         }
     }
 }

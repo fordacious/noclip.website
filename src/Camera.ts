@@ -437,6 +437,7 @@ export class FPSCameraController implements CameraController {
     }
 }
 
+// TODO fordacious: give this its own interface
 export class XRCameraController implements CameraController {
     public cameras = [];
     public webXRContext: WebXRContext;
@@ -455,6 +456,9 @@ export class XRCameraController implements CameraController {
     public sceneKeySpeedMult = 1;
 
     private offset = mat4.create();
+
+    public DEFAULT_SCALE: number = 70;
+    public scale: number = this.DEFAULT_SCALE;
 
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
@@ -492,6 +496,7 @@ export class XRCameraController implements CameraController {
         const keyMovement = this.keyMovement;
         const keyMoveLowSpeedCap = 0.01;
 
+        // TODO fordacious: implement VR controls. Need an XRInputManager
         if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp')) {
             keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
@@ -557,22 +562,20 @@ export class XRCameraController implements CameraController {
                     xrView.transform.matrix[8],xrView.transform.matrix[9],xrView.transform.matrix[10],xrView.transform.matrix[11],
                     xrView.transform.matrix[12],xrView.transform.matrix[13],xrView.transform.matrix[14],xrView.transform.matrix[15]);
                 
-                const scale = vec3.create();
-                vec3.set(scale, 1, 1, 1);
+                const scalevec = vec3.create();
                 // TODO fordacious: make this a settable value
-                var s = 70;
-                vec3.set(scale, s, s, s);
-                mat4.scale(mat, mat, scale);
+                vec3.set(scalevec, this.scale, this.scale, this.scale);
+                mat4.scale(mat, mat, scalevec);
 
                 // TODO fordacious: use mat4 methods to do this cleanly
                 const pos = vec3.create();
                 vec3.set(pos,
-                    xrView.transform.position.x * scale[0],
-                    xrView.transform.position.y * scale[1],
-                    xrView.transform.position.z * scale[2]);
-                mat[12] *= s;
-                mat[13] *= s;
-                mat[14] *= s;
+                    xrView.transform.position.x * scalevec[0],
+                    xrView.transform.position.y * scalevec[1],
+                    xrView.transform.position.z * scalevec[2]);
+                mat[12] *= this.scale;
+                mat[13] *= this.scale;
+                mat[14] *= this.scale;
                 mat[12] += this.offset[12];
                 mat[13] += this.offset[13];
                 mat[14] += this.offset[14];
@@ -582,10 +585,10 @@ export class XRCameraController implements CameraController {
 
                 // Set the window camera to match
                 // TODO fordacious: use the viewer space to actually set this
-                if (i == 0) {
-                    this.camera.worldMatrix.set(mat);
-                    mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
-                }
+                //if (i == 0) {
+                    //this.camera.worldMatrix.set(mat);
+                    //mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+                //}
 
                 var prjMatrix = xrView.projectionMatrix;
                 camera.projectionMatrix.set(prjMatrix);

@@ -3,7 +3,7 @@ import * as UI from './ui';
 
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
-import { CameraController, Camera } from './Camera';
+import { CameraController, Camera, XRCameraController } from './Camera';
 import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxLoadDisposition } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
@@ -13,6 +13,7 @@ import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
+import { Scene } from './DarkSoulsCollisionData/render';
 
 export interface Texture {
     name: string;
@@ -82,6 +83,7 @@ class ClearScene {
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
+    public xrCameraController: XRCameraController = new XRCameraController();
 
     public camera = new Camera();
     public xrCameras = [new Camera(), new Camera()]; // TODO fordacious: Number of cameras should match number of viewports
@@ -93,11 +95,13 @@ export class Viewer {
     public sceneTimeScale: number = 1;
 
     public gfxDevice: GfxDevice;
+    public xrGfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
     public renderStatisticsTracker = new RenderStatisticsTracker();
     public viewport: NormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
     public scene: SceneGfx | null = null;
+    public xrScene: SceneGfx | null = null;
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
@@ -105,14 +109,17 @@ export class Viewer {
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
     private clearScene: ClearScene = new ClearScene();
+    private xrClearScene: ClearScene = new ClearScene();
     private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
-    constructor(private gfxSwapChain: GfxSwapChain, public webXRContext: WebXRContext, public canvas: HTMLCanvasElement) {
+    constructor(private gfxSwapChain: GfxSwapChain, private xrGfxSwapChain: GfxSwapChain, public webXRContext: WebXRContext, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
         this.rafTime = window.performance.now();
 
         // GfxDevice.
+        // TODO fordacious: instead of doing things twice, put it in an object
         this.gfxDevice = this.gfxSwapChain.getDevice();
+        this.xrGfxDevice = this.xrGfxSwapChain?.getDevice();
         this.viewerRenderInput = {
             camera: this.camera,
             time: this.sceneTime,
@@ -144,56 +151,61 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private renderViewport() {
+    private renderViewport(device: GfxDevice, scene: Scene, clearScene : ClearScene) {
         let renderPass: GfxRenderPass | null = null;
-        if (this.scene !== null) {
-            renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+        if (scene !== null) {
+            renderPass = scene.render(device, this.viewerRenderInput);
         }
 
         if (renderPass === null) {
-            renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+            renderPass = clearScene.render(device, this.viewerRenderInput);
         } else {
-            this.clearScene.minimize(this.gfxDevice);
+            clearScene.minimize(device);
         }
 
         // TODO(jstpierre): Rework the render API eventually.
-        const descriptor = this.gfxDevice.queryRenderPass(renderPass);
+        const descriptor = device.queryRenderPass(renderPass);
 
         renderPass.endPass();
-        this.gfxDevice.submitPass(renderPass);
+        device.submitPass(renderPass);
 
         // Resolve.
         this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
         this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-        const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
+        const resolvePass = device.createRenderPass(this.resolveRenderPassDescriptor);
         resolvePass.endPass();
-        this.gfxDevice.submitPass(resolvePass);
+        device.submitPass(resolvePass);
     }
 
     private render(isWebXR:Boolean = false): void {
+        var device = isWebXR ? this.xrGfxDevice : this.gfxDevice;
+        var swapchain = isWebXR ? this.xrGfxSwapChain : this.gfxSwapChain;
+
         this.viewerRenderInput.camera = this.camera;
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
-        this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
 
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxDebugGroup(this.debugGroup);
-        this.gfxDevice.pushDebugGroup(this.debugGroup);
+        device.pushDebugGroup(this.debugGroup);
 
-        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+        this.viewerRenderInput.onscreenTexture = swapchain.getOnscreenTexture();
 
-        if (isWebXR && this.webXRContext.isRunning() && this.webXRContext.views && this.webXRContext.xrSession.renderState.baseLayer) {
-            this.cameraController.cameras = this.xrCameras;
+        if (isWebXR && !!device && this.webXRContext.isRunning() && this.webXRContext.views && this.webXRContext.xrSession.renderState.baseLayer) {
+            this.xrCameraController.webXRContext = this.webXRContext;
+            this.xrCameraController.update(this.inputManager, 0);
+            this.xrCameraController.cameras = this.xrCameras;
+
             for (let i = 0; i < this.webXRContext.views.length; i++) {
                 this.viewerRenderInput.camera = this.xrCameras[i];
                 let xrView : XrView = this.webXRContext.views[i];
                 let xrViewPort : XrViewPort = this.webXRContext.xrSession.renderState.baseLayer.getViewport(xrView);
-                
-                if (i == 0 && !!xrViewPort) {
-                    resizeCanvas(this.canvas, xrViewPort.width, xrViewPort.height, 1);
-                }
+
+                this.viewerRenderInput.backbufferWidth = xrViewPort.width;
+                this.viewerRenderInput.backbufferHeight = xrViewPort.height;
+                swapchain.configureSwapChain(xrViewPort.width, xrViewPort.height);
 
                 var oldViewport = [this.viewerRenderInput.viewport.x, this.viewerRenderInput.viewport.y, this.viewerRenderInput.viewport.w, this.viewerRenderInput.viewport.h];
                 this.viewerRenderInput.viewport.x = xrViewPort.x / xrViewPort.width;
@@ -201,26 +213,29 @@ export class Viewer {
                 this.viewerRenderInput.viewport.w = (xrViewPort.width / xrViewPort.width);
                 this.viewerRenderInput.viewport.h = (xrViewPort.height / xrViewPort.height);
 
-                this.renderViewport();
+                this.renderViewport(device, this.xrScene, this.xrClearScene);
 
                 // TODO fordacious: remove this
                 this.viewerRenderInput.viewport.x = oldViewport[0];
                 this.viewerRenderInput.viewport.y = oldViewport[1];
                 this.viewerRenderInput.viewport.w = oldViewport[2];
                 this.viewerRenderInput.viewport.h = oldViewport[3];
+                break;
             }
             
             var frameBuffer = this.webXRContext.xrSession.renderState.baseLayer.framebuffer;
-            this.gfxSwapChain.present(frameBuffer);
+            swapchain.present(frameBuffer);
         } else {
+            swapchain.configureSwapChain(this.canvas.width, this.canvas.height);
+
             this.viewerRenderInput.viewport = this.viewport;
 
-            this.renderViewport();
+            this.renderViewport(device, this.scene, this.clearScene);
 
-            this.gfxSwapChain.present();
+            swapchain.present();
         }
 
-        this.gfxDevice.popDebugGroup();
+        device.popDebugGroup();
         this.renderStatisticsTracker.endFrame();
 
         this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
@@ -239,6 +254,10 @@ export class Viewer {
     public setScene(scene: SceneGfx | null): void {
         this.scene = scene;
         this.cameraController = null;
+    }
+
+    public setXRScene(scene: SceneGfx | null): void {
+        this.xrScene = scene;
     }
 
     public update(nt: number): void {
@@ -314,7 +333,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true });
+    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {
@@ -335,8 +354,12 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
     }
 
+    const xrCanvas = document.createElement('canvas');
+    const xrgl = xrCanvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true });
+
     const gfxSwapChain = createSwapChainForWebGL2(gl);
-    out.viewer = new Viewer(gfxSwapChain, new WebXRContext(gl), canvas);
+    const xrGfxSwapChain = createSwapChainForWebGL2(xrgl);
+    out.viewer = new Viewer(gfxSwapChain, xrGfxSwapChain, new WebXRContext(xrgl), canvas);
 
     return InitErrorCode.SUCCESS;
 }
@@ -346,7 +369,7 @@ async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement)
     if (gfxSwapChain === null)
         return InitErrorCode.MISSING_MISC_WEB_APIS;
 
-    out.viewer = new Viewer(gfxSwapChain, null, canvas);
+    out.viewer = new Viewer(gfxSwapChain, null, null, canvas);
     return InitErrorCode.SUCCESS;
 }
 
