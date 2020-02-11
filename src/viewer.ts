@@ -53,11 +53,9 @@ function resetGfxDebugGroup(group: GfxDebugGroup): void {
 }
 
 export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, devicePixelRatio: number): void {
-    width = 2200; // TODO fordacious: remove this. Should just make a seperate webxr canvas
-    height = 2200;
     canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
-    canvas.width = width;// * devicePixelRatio;
-    canvas.height = height;// * devicePixelRatio;
+    canvas.width = width * devicePixelRatio;
+    canvas.height = height * devicePixelRatio;
 }
 
 // TODO(jstpierre): Find a more elegant way to write this that doesn't take as many resources.
@@ -192,6 +190,10 @@ export class Viewer {
                 this.viewerRenderInput.camera = this.xrCameras[i];
                 let xrView : XrView = this.webXRContext.views[i];
                 let xrViewPort : XrViewPort = this.webXRContext.xrSession.renderState.baseLayer.getViewport(xrView);
+                
+                if (i == 0 && !!xrViewPort) {
+                    resizeCanvas(this.canvas, xrViewPort.width, xrViewPort.height, 1);
+                }
 
                 var oldViewport = [this.viewerRenderInput.viewport.x, this.viewerRenderInput.viewport.y, this.viewerRenderInput.viewport.w, this.viewerRenderInput.viewport.h];
                 this.viewerRenderInput.viewport.x = xrViewPort.x / xrViewPort.width;
@@ -258,7 +260,7 @@ export class Viewer {
         camera.aspect = aspect;
         camera.setClipPlanes(5);
 
-        if (this.cameraController) {
+        if (this.cameraController && this.cameraController.update) {
             const updated = this.cameraController.update(this.inputManager, dt);
             if (updated)
                 this.oncamerachanged();

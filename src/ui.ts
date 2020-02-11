@@ -1640,21 +1640,21 @@ class XRSettings extends Panel {
         this.contents.style.lineHeight = '36px';
 
         this.EnableXRCheckBox = new Checkbox('Enable XR?');
-        this.EnableXRCheckBox.onchanged = () => { GlobalSaveManager.saveSetting(`EnableXR`, this.EnableXRCheckBox.checked); };
         this.contents.appendChild(this.EnableXRCheckBox.elem);
-        GlobalSaveManager.addSettingListener('EnableXR', this.enableXRChecked.bind(this));
+        this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
     }
 
     private enableXRChecked(saveManager: SaveManager, key: string): void {
-        const enableXR = saveManager.loadSetting<boolean>(key, false);
+        const enableXR = this.EnableXRCheckBox.checked;
         this.EnableXRCheckBox.setChecked(enableXR);
 
         if (this.EnableXRCheckBox.checked) {
             this.webXRContext.start();
-            this.viewer.setCameraController(XRCameraController);
+            this.viewer.setCameraController(new XRCameraController());
         } else {
             this.webXRContext.end();
-            this.viewer.setCameraController(FPSCameraController);
+            // TODO fordacious: this will not relfect in the UI
+            this.viewer.setCameraController(new FPSCameraController());
         }
     }
 }
